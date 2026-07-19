@@ -1,0 +1,18 @@
+# Quy tắc dành cho AI (Cline) khi làm việc với dự án này
+
+## Nguyên tắc kiến trúc
+- **Tách biệt hoàn toàn UI (Tkinter) và Logic toán học.**
+  - src/gui/: chỉ chứa mã liên quan đến giao diện (Tkinter Frame, Canvas, Entry, Button, Label…).
+  - src/solver/: chỉ chứa mã thuật toán giải bài toán vận tải, KHÔNG import tkinter.
+  - main.py: chỉ khởi tạo TransportationApp và gọi run(), không chứa logic nghiệp vụ.
+
+## Quy tắc viết code
+- Docstring và comment viết bằng **tiếng Việt** (có dấu).
+- Sử dụng **type hint** đầy đủ cho tham số và kiểu trả về.
+- Ký hiệu chuẩn học thuật:
+  - a_i – lượng phát của trạm phát i (supply)
+  - b_j – lượng thu của trạm thu j (demand)
+  - c_ij – cước phí vận chuyển từ i đến j
+  - u_i, v_j – thế vị dòng i / cột j
+  - delta_ij – lượng thay đổi (hay hệ số kiểm tra) cho ô (i, j)
+- Tên biến, hàm, lớp bằng tiếng Anh; docstring/comment bằng tiếng Việt.
