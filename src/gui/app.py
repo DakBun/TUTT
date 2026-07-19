@@ -338,12 +338,6 @@ class TransportationApp:
             cost = result['cost']
             self.c = result.get('c', self.c)
 
-        if padded:
-            for i in range(self.m):
-                for j in range(self.n):
-                    if alloc[i][j] < 1e-12 and basic_count < need:
-                        alloc[i][j] = 0.0
-                        basic_count += 1
 
         self.lbl_method.config(text=f'Phuong phap: {method_name}')
         self.lbl_cost.config(text=f'Tong chi phi Z = {self.fmt(cost)}')
