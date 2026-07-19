@@ -1,22 +1,22 @@
 ﻿"""
-main.py — Entry point của ứng dụng.
+main.py - Entry point cua ung dung.
 
-Khởi tạo TransportationApp và chạy vòng lặp giao diện.
+Khoi tao cua so Tkinter, tao TransportationApp va chay vong lap giao dien.
 """
 
 import sys
 import os
 
-# Thêm thư mục gốc vào sys.path để import src được
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import tkinter as tk
 from src.gui.app import TransportationApp
 
 
 def main() -> None:
-    """Điểm vào chính của chương trình."""
-    app = TransportationApp()
-    app.run()
+    root = tk.Tk()
+    app = TransportationApp(root)
+    root.mainloop()
 
 
 if __name__ == "__main__":
