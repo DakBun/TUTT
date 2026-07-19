@@ -27,6 +27,11 @@ class TransportationApp:
         self.x = []
 
         self.solver = None
+        self.current_method = None
+        self.step_btn = None
+        self.auto_btn = None
+        self.reset_btn = None
+        self.step_log = None
 
         self.setup_ui()
 
@@ -102,6 +107,25 @@ class TransportationApp:
         tk.Button(btn_frame, text='Giai - Cuc tieu cuoc phi', command=self.solve_moc,
                  bg='#2e7d32', fg='white', font=('Segoe UI', 9, 'bold'),
                  padx=12, pady=4, cursor='hand2').pack(side=tk.LEFT, padx=4)
+
+        # Solver step controls
+        ctrl_frame = tk.Frame(input_frame)
+        ctrl_frame.pack(pady=4)
+
+        self.step_btn = tk.Button(ctrl_frame, text='Buoc tiep', command=self.step_once,
+                                  bg='#1565c0', fg='white', font=('Segoe UI', 9, 'bold'),
+                                  padx=12, pady=4, cursor='hand2', state=tk.DISABLED)
+        self.step_btn.pack(side=tk.LEFT, padx=4)
+
+        self.auto_btn = tk.Button(ctrl_frame, text='Giai toan bo', command=self.solve_auto,
+                                  bg='#c62828', fg='white', font=('Segoe UI', 9, 'bold'),
+                                  padx=12, pady=4, cursor='hand2', state=tk.DISABLED)
+        self.auto_btn.pack(side=tk.LEFT, padx=4)
+
+        self.reset_btn = tk.Button(ctrl_frame, text='Reset buoc', command=self.reset_solver,
+                                   bg='#546e7a', fg='white', font=('Segoe UI', 9, 'bold'),
+                                   padx=12, pady=4, cursor='hand2', state=tk.DISABLED)
+        self.reset_btn.pack(side=tk.LEFT, padx=4)
         tk.Button(btn_frame, text='Giai - Goc tren-trai', command=self.solve_nw,
                  bg='#6a1b9a', fg='white', font=('Segoe UI', 9, 'bold'),
                  padx=12, pady=4, cursor='hand2').pack(side=tk.LEFT, padx=4)
@@ -166,6 +190,15 @@ class TransportationApp:
                                  font=('Segoe UI', 9), fg='#555', bg='#fff8e1',
                                  anchor=tk.W, padx=10, pady=4)
         self.lbl_info.pack(fill=tk.X, padx=5, pady=(0, 5))
+
+        # Step log
+        self.step_frame = tk.Frame(result_frame)
+        self.step_frame.pack(fill=tk.X, padx=5, pady=(0, 2))
+        tk.Label(self.step_frame, text='Lich su buoc:', font=('Segoe UI', 9, 'bold')).pack(anchor=tk.W)
+        self.step_log = tk.Text(self.step_frame, height=6, font=('Consolas', 9),
+                                bg='#f5f5f5', relief=tk.FLAT)
+        self.step_log.pack(fill=tk.X, padx=5, pady=(0, 5))
+        self.step_log.config(state='disabled')
 
     # ------------------------------------------------------------------
     # Tao bang nhap lieu
@@ -302,17 +335,23 @@ class TransportationApp:
         self.read_input()
         if self.solver is None:
             return
+        self.current_method = 'least_cost'
+        self._clear_step_log()
         result = self.solver.find_initial_solution('least_cost')
         self.x = result['x']
         self.show_result('Cuc tieu cuoc phi', result)
+        self._enable_solver_controls()
 
     def solve_nw(self):
         self.read_input()
         if self.solver is None:
             return
+        self.current_method = 'northwest_corner'
+        self._clear_step_log()
         result = self.solver.find_initial_solution('northwest_corner')
         self.x = result['x']
         self.show_result('Goc tren-trai', result)
+        self._enable_solver_controls()
 
     # ------------------------------------------------------------------
     # Hien thi ket qua
@@ -332,11 +371,29 @@ class TransportationApp:
             alloc = result['x']
             self.m = len(alloc)
             self.n = len(alloc[0]) if alloc else 0
-            basic_count = result['basic_count']
-            need = result['need']
-            padded = result['padded']
-            cost = result['cost']
-            self.c = result.get('c', self.c)
+            # Cap nhat ma tran cuoc phi day du (da can bang) neu can thiet
+            if 'c' in result:
+                self.c = result['c']
+            elif self.solver is not None:
+                try:
+                    state = self.solver.get_state()
+                    if 'c' in state:
+                        self.c = state['c']
+                except Exception:
+                    pass
+
+            basic_count = result.get('basic_count')
+            if basic_count is None:
+                basic_count = sum(1 for i in range(self.m) for j in range(self.n) if alloc[i][j] > 0)
+            need = result.get('need')
+            if need is None:
+                need = self.m + self.n - 1
+            padded = result.get('padded')
+            if padded is None:
+                padded = basic_count < need
+            cost = result.get('cost')
+            if cost is None:
+                cost = sum(alloc[i][j] * self.c[i][j] for i in range(self.m) for j in range(self.n))
 
 
         self.lbl_method.config(text=f'Phuong phap: {method_name}')
@@ -382,6 +439,10 @@ class TransportationApp:
         bg_color = '#e8f5e9' if not padded else '#fff3e0'
         fg_color = '#2e7d32' if not padded else '#e65100'
         self.lbl_info.config(text=info, bg=bg_color, fg=fg_color)
+
+        if result and 'description' in result:
+            self._append_log(result['description'])
+        self._enable_solver_controls()
 
     # ------------------------------------------------------------------
     # Nap du lieu tu CSV
@@ -443,6 +504,7 @@ class TransportationApp:
         self.dem_entries = []
         self.x = []
         self.solver = None
+        self.current_method = None
 
         self.lbl_method.config(text='Phuong phap: --')
         self.lbl_cost.config(text='Tong chi phi Z = --')
@@ -451,7 +513,141 @@ class TransportationApp:
         self.result_tree['columns'] = []
         self.lbl_info.config(text='Chua co ket qua. Hay nhap du lieu va bam "Giai".',
                              bg='#fff8e1', fg='#555')
+        if hasattr(self, 'step_log') and self.step_log is not None:
+            self.step_log.config(state='normal')
+            self.step_log.delete('1.0', tk.END)
+            self.step_log.config(state='disabled')
+        for btn in (self.step_btn, self.auto_btn, self.reset_btn):
+            if btn:
+                btn.config(state=tk.DISABLED)
 
+
+    def _fill_table(self, alloc, basic_count, need, padded):
+        self.lbl_method.config(text=f'Phuong phap: {self.current_method or "--"}')
+        cost = sum(alloc[i][j] * self.c[i][j] for i in range(self.m) for j in range(self.n))
+        self.lbl_cost.config(text=f'Tong chi phi Z = {self.fmt(cost)}')
+
+        columns = ['col_label'] + [f'col_{j}' for j in range(self.n)] + ['col_sup']
+        self.result_tree['columns'] = columns
+
+        self.result_tree.column('col_label', width=60, minwidth=50, anchor=tk.CENTER, stretch=False)
+        for j in range(self.n):
+            self.result_tree.column(f'col_{j}', width=90, minwidth=70, anchor=tk.CENTER)
+        self.result_tree.column('col_sup', width=80, minwidth=60, anchor=tk.CENTER, stretch=False)
+
+        self.result_tree.heading('col_label', text='i\\j')
+        for j in range(self.n):
+            self.result_tree.heading(f'col_{j}', text=f'B_{j+1}')
+        self.result_tree.heading('col_sup', text='a_i')
+
+        for item in self.result_tree.get_children():
+            self.result_tree.delete(item)
+
+        self.result_tree.tag_configure('row_even', background='#f5f9ff')
+        self.result_tree.tag_configure('row_odd', background='#ffffff')
+        self.result_tree.tag_configure('row_total', background='#e8f5e9', font=('Segoe UI', 9, 'bold'))
+
+        for i in range(self.m):
+            values = [f'A_{i+1}']
+            for j in range(self.n):
+                values.append(self.fmt(alloc[i][j]))
+            values.append('-')
+            tag = 'row_even' if i % 2 == 0 else 'row_odd'
+            self.result_tree.insert('', tk.END, values=values, tags=(tag,))
+
+        dem_values = ['b_j']
+        for j in range(self.n):
+            dem_values.append('-')
+        dem_values.append('Sum=Sum')
+        self.result_tree.insert('', tk.END, values=dem_values, tags=('row_total',))
+
+        status_icon = 'OK' if not padded else '!!'
+        info = f'{status_icon} So o co ban: {basic_count} / can >= {need} (m + n - 1). '
+        info += 'Da them o 0 de du so o co ban.' if padded else 'Da du so o co ban.'
+        bg_color = '#e8f5e9' if not padded else '#fff3e0'
+        fg_color = '#2e7d32' if not padded else '#e65100'
+        self.lbl_info.config(text=info, bg=bg_color, fg=fg_color)
+
+    def _clear_step_log(self):
+        if hasattr(self, 'step_log') and self.step_log is not None:
+            self.step_log.config(state='normal')
+            self.step_log.delete('1.0', tk.END)
+            self.step_log.config(state='disabled')
+
+    def _append_log(self, text):
+        if not text:
+            return
+        self.step_log.config(state='normal')
+        self.step_log.insert(tk.END, text + '\n')
+        self.step_log.see(tk.END)
+        self.step_log.config(state='disabled')
+
+    def _enable_solver_controls(self):
+        for btn in (self.step_btn, self.auto_btn, self.reset_btn):
+            if btn:
+                btn.config(state=tk.NORMAL)
+
+    def step_once(self):
+        if self.solver is None:
+            return
+        step = self.solver.optimize_step()
+        if step.get('error'):
+            messagebox.showerror('Loi', step['error'])
+            return
+        self.x = step['x']
+        state = self.solver.get_state()
+        alloc = state['x']
+        basic_count = len(state['basic_cells'])
+        need = state['m'] + state['n'] - 1
+        padded = basic_count < need
+        cost = state['cost']
+        self.lbl_method.config(text=f'Phuong phap: {self.current_method or "MODI"}')
+        self.lbl_cost.config(text=f'Tong chi phi Z = {self.fmt(cost)}')
+        self._fill_table(alloc, basic_count, need, padded)
+        self._append_log(step.get('description', ''))
+        if step.get('is_optimal'):
+            self.step_btn.config(state=tk.DISABLED)
+
+    def solve_auto(self):
+        if self.solver is None:
+            return
+        state = self.solver.solve(self.current_method or 'least_cost')
+        self.x = state['x']
+        alloc = state['x']
+        basic_count = len(state['basic_cells'])
+        need = state['m'] + state['n'] - 1
+        padded = basic_count < need
+        cost = state['cost']
+        method_name = state['method'] or self.current_method or '--'
+        self.lbl_method.config(text=f'Phuong phap: {method_name}')
+        self.lbl_cost.config(text=f'Tong chi phi Z = {self.fmt(cost)}')
+        self._fill_table(alloc, basic_count, need, padded)
+        self._clear_step_log()
+        for s in state.get('steps', []):
+            self._append_log(s.get('description', ''))
+        steps = state.get('steps', [])
+        if steps and steps[-1].get('is_optimal'):
+            self.step_btn.config(state=tk.DISABLED)
+        else:
+            self.step_btn.config(state=tk.NORMAL)
+
+    def reset_solver(self):
+        if self.solver is None:
+            return
+        self.solver.reset()
+        self.x = []
+        self.current_method = None
+        for btn in (self.step_btn, self.auto_btn, self.reset_btn):
+            if btn:
+                btn.config(state=tk.DISABLED)
+        self._clear_step_log()
+        self.lbl_method.config(text='Phuong phap: --')
+        self.lbl_cost.config(text='Tong chi phi Z = --')
+        for item in self.result_tree.get_children():
+            self.result_tree.delete(item)
+        self.result_tree['columns'] = []
+        self.lbl_info.config(text='Da reset. Hay nhap du lieu va bam "Giai".',
+                             bg='#fff8e1', fg='#555')
 
 def main():
     root = tk.Tk()
