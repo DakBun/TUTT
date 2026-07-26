@@ -44,33 +44,7 @@ class TransportationApp:
         tk.Label(title_frame, text='Trinh bay: Nhom 6',
                  font=('Segoe UI', 10), fg='#555').pack()
 
-        # Theory summary
-        theory_frame = tk.LabelFrame(self.root, text=' Tom tat ly thuyet nhanh ',
-                                     font=('Segoe UI', 10, 'bold'), fg='#1565c0')
-        theory_frame.pack(fill=tk.X, padx=10, pady=5)
 
-        theory_left = tk.Frame(theory_frame)
-        theory_left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
-        tk.Label(theory_left, text='Mo hinh: Z = min SumSum c_ij * x_ij',
-                 font=('Segoe UI', 9, 'bold')).pack(anchor=tk.W)
-        tk.Label(theory_left, text='. Du tru: Sum x_ij = a_i (voi moi i)',
-                 font=('Segoe UI', 9)).pack(anchor=tk.W, padx=10)
-        tk.Label(theory_left, text='. Nhu cau: Sum x_ij = b_j (voi moi j)',
-                 font=('Segoe UI', 9)).pack(anchor=tk.W, padx=10)
-        tk.Label(theory_left, text='. Can bang: Sum a_i = Sum b_j',
-                 font=('Segoe UI', 9)).pack(anchor=tk.W, padx=10)
-        tk.Label(theory_left, text='Luu y: Phan mem lap phuong an co ban ban dau, sau do kiem tra so o co ban co du m + n - 1.',
-                 font=('Segoe UI', 8), fg='#666').pack(anchor=tk.W, pady=2)
-
-        theory_right = tk.Frame(theory_frame, bg='#eef2f7', padx=10, pady=5)
-        theory_right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=5, pady=5)
-        tk.Label(theory_right, text='Vi du mau - Vi du 5', font=('Segoe UI', 9, 'bold'),
-                 bg='#eef2f7').pack(anchor=tk.W)
-        example_text = 'a = [70, 60, 20, 30]\nb = [10, 40, 40, 50, 10, 30]\nC = [2 3 6 8 1 4; 1 7 2 6 5 2;\n     3 6 1 2 4 5; 7 4 3 5 2 1]'
-        tk.Label(theory_right, text=example_text, font=('Consolas', 9),
-                 bg='#eef2f7', justify=tk.LEFT).pack(anchor=tk.W, pady=2)
-        tk.Label(theory_right, text='-> Bam "Vi du 5" roi "Giai"',
-                 font=('Segoe UI', 8), fg='#c43e00', bg='#eef2f7').pack(anchor=tk.W)
 
         # Input section
         input_frame = tk.LabelFrame(self.root, text=' 1. Nhap du lieu bai toan ',
