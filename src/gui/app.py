@@ -103,13 +103,28 @@ class TransportationApp:
         tk.Button(btn_frame, text='Giai - Goc tren-trai', command=self.solve_nw,
                  bg='#6a1b9a', fg='white', font=('Segoe UI', 9, 'bold'),
                  padx=12, pady=4, cursor='hand2').pack(side=tk.LEFT, padx=4)
+        tk.Button(btn_frame, text='Giai - Uu tien kep', command=self.solve_dp,
+                 bg='#00695c', fg='white', font=('Segoe UI', 9, 'bold'),
+                 padx=12, pady=4, cursor='hand2').pack(side=tk.LEFT, padx=4)
+        tk.Button(btn_frame, text='Vi du 1', command=self.load_vd1,
+                 bg='#ef6c00', fg='white', font=('Segoe UI', 9, 'bold'),
+                 padx=12, pady=4, cursor='hand2').pack(side=tk.LEFT, padx=4)
+        tk.Button(btn_frame, text='Vi du 2', command=self.load_vd2,
+                 bg='#ef6c00', fg='white', font=('Segoe UI', 9, 'bold'),
+                 padx=12, pady=4, cursor='hand2').pack(side=tk.LEFT, padx=4)
+        tk.Button(btn_frame, text='Vi du 3', command=self.load_image_a,
+                 bg='#00838f', fg='white', font=('Segoe UI', 9, 'bold'),
+                 padx=12, pady=4, cursor='hand2').pack(side=tk.LEFT, padx=4)
         tk.Button(btn_frame, text='Vi du 5', command=self.load_example5,
                  bg='#ef6c00', fg='white', font=('Segoe UI', 9, 'bold'),
                  padx=12, pady=4, cursor='hand2').pack(side=tk.LEFT, padx=4)
-        tk.Button(btn_frame, text='Vi du (a)', command=self.load_image_a,
+        tk.Button(btn_frame, text='Vi du 6', command=self.load_vd6,
                  bg='#00838f', fg='white', font=('Segoe UI', 9, 'bold'),
                  padx=12, pady=4, cursor='hand2').pack(side=tk.LEFT, padx=4)
-        tk.Button(btn_frame, text='Vi du (b)', command=self.load_image_b,
+        tk.Button(btn_frame, text='Vi du 7 (o cam)', command=self.load_vd7,
+                 bg='#b71c1c', fg='white', font=('Segoe UI', 9, 'bold'),
+                 padx=12, pady=4, cursor='hand2').pack(side=tk.LEFT, padx=4)
+        tk.Button(btn_frame, text='Khong can bang', command=self.load_image_b,
                  bg='#00695c', fg='white', font=('Segoe UI', 9, 'bold'),
                  padx=12, pady=4, cursor='hand2').pack(side=tk.LEFT, padx=4)
         tk.Button(btn_frame, text='Xoa', command=self.clear_all,
@@ -327,6 +342,17 @@ class TransportationApp:
         self.show_result('Goc tren-trai', result)
         self._enable_solver_controls()
 
+    def solve_dp(self):
+        self.read_input()
+        if self.solver is None:
+            return
+        self.current_method = 'double_priority'
+        self._clear_step_log()
+        result = self.solver.find_initial_solution('double_priority')
+        self.x = result['x']
+        self.show_result('Uu tien kep', result)
+        self._enable_solver_controls()
+
     # ------------------------------------------------------------------
     # Hien thi ket qua
     # ------------------------------------------------------------------
@@ -449,22 +475,46 @@ class TransportationApp:
         messagebox.showinfo(title, f'Da dien san du lieu {title}. Bam "Giai" de xem ket qua.')
 
     def load_example5(self):
-        csv_path = Path(__file__).resolve().parent.parent.parent / 'data' / 'example_5.csv'
+        csv_path = Path(__file__).resolve().parent.parent.parent / 'data' / 'vd5.csv'
         if not csv_path.exists():
-            csv_path = Path('data/example_5.csv')
-        self._load_from_csv(str(csv_path), 'Vi du 5')
+            csv_path = Path('data/vd5.csv')
+        self._load_from_csv(str(csv_path), 'Vi du 5 (PP1/PP3)')
 
     def load_image_a(self):
-        csv_path = Path(__file__).resolve().parent.parent.parent / 'data' / 'example_a.csv'
+        csv_path = Path(__file__).resolve().parent.parent.parent / 'data' / 'vd3.csv'
         if not csv_path.exists():
-            csv_path = Path('data/example_a.csv')
-        self._load_from_csv(str(csv_path), 'Anh (a)')
+            csv_path = Path('data/vd3.csv')
+        self._load_from_csv(str(csv_path), 'Vi du 3')
 
     def load_image_b(self):
-        csv_path = Path(__file__).resolve().parent.parent.parent / 'data' / 'example_b.csv'
+        csv_path = Path(__file__).resolve().parent.parent.parent / 'data' / 'khong_can_bang.csv'
         if not csv_path.exists():
-            csv_path = Path('data/example_b.csv')
-        self._load_from_csv(str(csv_path), 'Anh (b)')
+            csv_path = Path('data/khong_can_bang.csv')
+        self._load_from_csv(str(csv_path), 'Khong can bang (muc 5.3)')
+
+    def load_vd1(self):
+        csv_path = Path(__file__).resolve().parent.parent.parent / 'data' / 'vd1.csv'
+        if not csv_path.exists():
+            csv_path = Path('data/vd1.csv')
+        self._load_from_csv(str(csv_path), 'Vi du 1')
+
+    def load_vd2(self):
+        csv_path = Path(__file__).resolve().parent.parent.parent / 'data' / 'vd2.csv'
+        if not csv_path.exists():
+            csv_path = Path('data/vd2.csv')
+        self._load_from_csv(str(csv_path), 'Vi du 2 (PP2)')
+
+    def load_vd6(self):
+        csv_path = Path(__file__).resolve().parent.parent.parent / 'data' / 'vd6.csv'
+        if not csv_path.exists():
+            csv_path = Path('data/vd6.csv')
+        self._load_from_csv(str(csv_path), 'Vi du 6')
+
+    def load_vd7(self):
+        csv_path = Path(__file__).resolve().parent.parent.parent / 'data' / 'vd7.csv'
+        if not csv_path.exists():
+            csv_path = Path('data/vd7.csv')
+        self._load_from_csv(str(csv_path), 'Vi du 7 (o cam)')
 
     # ------------------------------------------------------------------
     # Xoa

@@ -35,12 +35,16 @@ class TransportationSolver:
         self._m = balanced.num_supply
         self._n = balanced.num_demand
         self._balanced_flag = not data.is_balanced()
+        self._forbidden: set[tuple[int, int]] = set(balanced.forbidden)
+        self._forbidden_check: dict[str, Any] | None = None
         self._x: np.ndarray | None = None
         self._u: np.ndarray | None = None
         self._v: np.ndarray | None = None
         self._method: str = ""
         self._basic_cells: list[tuple[int, int]] = []
         self._steps: list[dict[str, Any]] = []
+        self._is_optimal: bool = False
+        self._marks: list[list[str]] = []
 
     # ------------------------------------------------------------------
     # 1. Phuong phap chi phi nho nhat (Matrix Minimum / Least Cost)
@@ -134,16 +138,120 @@ class TransportationSolver:
         return x, basic_cells
 
     # ------------------------------------------------------------------
+    # 2b. Phuong phap uu tien kep theo gia cuoc cuc tieu (PP2, slide 24)
+    # ------------------------------------------------------------------
+
+    def double_priority(self) -> tuple[np.ndarray, list[tuple[int, int]]]:
+        """
+        Phuong phap uu tien kep theo gia cuoc cuc tieu (PP2 muc 5.2.3).
+
+        Buoc A - Danh dau (tinh MOT lan tren ma tran cuoc phi da can bang):
+          - Voi moi HANG i: tim min c[i,:], moi o dat gia tri min do duoc danh 1 lan.
+          - Voi moi COT j: tim min c[:,j], moi o dat gia tri min do duoc danh 1 lan.
+          - O duoc danh dau 2 lan (vua min hang vua min cot) => nhan "VV".
+          - O duoc danh dau 1 lan => nhan "V".
+          - O khong duoc danh dau => nhan "" (khong dau).
+          Ket qua luu vao self._marks (list 2 chieu cac chuoi).
+
+        Buoc B - Phan phoi theo 3 dot uu tien: VV -> V -> "".
+          Trong moi dot dung dunng quy tac cua phuong phap cuc tieu cuoc phi:
+          chon o co cuoc phi nho nhat trong cac hang/cot chua bi gach; neu
+          nhieu o cung cuoc phi min thi uu tien o co min(sup,dem) LON HON.
+          Xu ly suy bien giong least_cost: khi cung va cau can kiet cung luc,
+          chi gach HANG, giu COT lai de vong sau tao o co ban 0.
+          Dung khi da du m+n-1 o co ban hoac khong con o nao phan phoi duoc.
+
+        Tra ve (ma tran x, danh sach o co ban).
+        """
+        m, n = self._m, self._n
+        # === Buoc A: danh dau ===
+        marks = [[""] * n for _ in range(m)]
+        # min moi hang -> danh dau 1 lan (V)
+        for i in range(m):
+            mn = float(np.min(self._c[i, :]))
+            for j in range(n):
+                if abs(self._c[i, j] - mn) < 1e-12:
+                    marks[i][j] = "V"
+        # min moi cot -> cong them (V -> VV)
+        for j in range(n):
+            mn = float(np.min(self._c[:, j]))
+            for i in range(m):
+                if abs(self._c[i, j] - mn) < 1e-12:
+                    marks[i][j] = "VV" if marks[i][j] == "V" else "V"
+        self._marks = marks
+
+        sup = self._a.copy()
+        dem = self._b.copy()
+        x = np.zeros((m, n), dtype=float)
+        row_done = np.zeros(m, dtype=bool)
+        col_done = np.zeros(n, dtype=bool)
+        basic_cells: list[tuple[int, int]] = []
+
+        # === Buoc B: 3 dot uu tien ===
+        for priority in ("VV", "V", ""):
+            while len(basic_cells) < m + n - 1:
+                candidates = []
+                for i in range(m):
+                    if row_done[i]:
+                        continue
+                    for j in range(n):
+                        if col_done[j]:
+                            continue
+                        if marks[i][j] != priority:
+                            continue
+                        candidates.append({
+                            'i': i, 'j': j,
+                            'cost': float(self._c[i, j]),
+                            'amt': min(sup[i], dem[j]),
+                        })
+                if not candidates:
+                    break
+                # Chon cuoc phi nho nhat; neu bang nhau chon amt lon nhat
+                candidates.sort(key=lambda item: (item['cost'], -item['amt']))
+                best = candidates[0]
+                i, j = best['i'], best['j']
+                amt = best['amt']
+                x[i, j] = amt
+                basic_cells.append((i, j))
+                sup[i] -= amt
+                dem[j] -= amt
+
+                row_exhausted = sup[i] < 1e-12
+                col_exhausted = dem[j] < 1e-12
+                if row_exhausted and col_exhausted:
+                    # === SUY BIEN: chi gach hang, giu cot (dem=0) de tao o 0 ===
+                    row_done[i] = True
+                elif row_exhausted:
+                    row_done[i] = True
+                elif col_exhausted:
+                    col_done[j] = True
+
+        return x, basic_cells
+
+    # ------------------------------------------------------------------
     # 3. Tinh tong chi phi Z = SumSum c_ij * x_ij
     # ------------------------------------------------------------------
 
-    def total_cost(self, x: np.ndarray | None = None) -> float:
-        """Tinh tong chi phi Z = SumSum c_ij * x_ij."""
+    def total_cost(
+        self,
+        x: np.ndarray | None = None,
+        exclude_forbidden: bool = False,
+    ) -> float:
+        """
+        Tinh tong chi phi Z = SumSum c_ij * x_ij.
+        Khi exclude_forbidden=True, khong cong chi phi cua cac o cam vao tong
+        (dung de bao cao chi phi thuc te). Mac dinh giu nguyen hanh vi cu.
+        """
         if x is None:
             x = self._x
         if x is None:
             return 0.0
-        return float(np.sum(x * self._c))
+        if not exclude_forbidden:
+            return float(np.sum(x * self._c))
+        mask = np.ones(self._c.shape, dtype=bool)
+        for (i, j) in self._forbidden:
+            mask[i, j] = False
+        return float(np.sum(x[mask] * self._c[mask]))
 
     # ------------------------------------------------------------------
     # 4. Tim phuong an ban dau (public API)
@@ -158,6 +266,9 @@ class TransportationSolver:
         if method == "northwest_corner":
             x, basic_cells = self.northwest_corner()
             method_name = "Goc tren-trai (Northwest Corner)"
+        elif method == "double_priority":
+            x, basic_cells = self.double_priority()
+            method_name = "Uu tien kep theo gia cuoc cuc tieu"
         else:
             x, basic_cells = self.least_cost()
             method_name = "Cuc tieu cuoc phi (Least Cost)"
@@ -205,6 +316,9 @@ class TransportationSolver:
             'cost': self.total_cost(),
             'balanced_flag': self._balanced_flag,
             'steps': self._steps,
+            'is_optimal': self._is_optimal,
+            'forbidden': sorted(list(self._forbidden)),
+            'forbidden_check': self._forbidden_check,
         }
 
     def reset(self) -> None:
@@ -213,6 +327,8 @@ class TransportationSolver:
         self._method = ""
         self._basic_cells = []
         self._steps.clear()
+        self._is_optimal = False
+        self._forbidden_check = None
 
     # ------------------------------------------------------------------
     # Phase 4 - Thuat toan the vi MODI
@@ -265,9 +381,14 @@ class TransportationSolver:
                 if (i, j) in seen:
                     continue
                 if self._x[i, j] > 1e-9:
-                    union(i, m + j)
-                    basic.append((i, j))
-                    seen.add((i, j))
+                    if union(i, m + j):
+                        basic.append((i, j))
+                        seen.add((i, j))
+                    else:
+                        print(
+                            f"[CANH BAO] O ({i},{j}) co x>0 nhung tao chu trinh trong tap o "
+                            f"co ban - phuong an hien tai khong phai phuong an cuc bien."
+                        )
 
         # Bo sung o chon 0 neu con thieu de du m+n-1 o khong vong.
         if len(basic) < m + n - 1:
@@ -282,8 +403,6 @@ class TransportationSolver:
                     if union(i, m + j):
                         basic.append((i, j))
                         seen.add((i, j))
-                        if self._x[i, j] < 1e-9:
-                            self._x[i, j] = 1e-7  # o chon 0 (Chu y, muc 5.1.3)
 
         self._basic_cells = basic
 
@@ -345,16 +464,22 @@ class TransportationSolver:
         max_delta = float(delta.max())
         is_optimal = max_delta <= 1e-9
 
+        for (bi, bj) in self._basic_cells:
+            assert abs(delta[bi, bj]) < 1e-6, \
+                f"BUG: o co so ({bi},{bj}) co delta={delta[bi,bj]:.9f}, phai bang 0"
+
         entering: tuple[int, int] | None = None
         if not is_optimal:
             ei, ej = np.unravel_index(int(np.argmax(delta)), delta.shape)
             entering = (int(ei), int(ej))
 
+        self._is_optimal = bool(is_optimal)
+
         return {
             'u': self._u.tolist(),
             'v': self._v.tolist(),
             'delta': delta.tolist(),
-            'is_optimal': bool(is_optimal),
+            'is_optimal': self._is_optimal,
             'entering_cell': entering,
             'max_delta': max_delta,
         }
@@ -450,6 +575,14 @@ class TransportationSolver:
             sign = 1.0 if idx % 2 == 0 else -1.0
             self._x[i, j] = self._x[i, j] + sign * theta
 
+        assert np.allclose(self._x.sum(axis=1), self._a, atol=1e-6), "Vi pham rang buoc cung"
+        assert np.allclose(self._x.sum(axis=0), self._b, atol=1e-6), "Vi pham rang buoc cau"
+        if theta < 1e-9:
+            print(
+                f"[CANH BAO] theta = 0 tai o vao {entering} - buoc xoay suy bien, "
+                f"Z khong giam"
+            )
+
         self._basic_cells = [cell for cell in self._basic_cells if cell != leaving]
         self._basic_cells.append(entering)
 
@@ -485,4 +618,68 @@ class TransportationSolver:
             if step.get('is_optimal') or step.get('error'):
                 break
 
+        self._forbidden_check = self.check_forbidden_cells()
         return self.get_state()
+
+    def compare_initial_methods(self) -> dict[str, Any]:
+        """
+        Chay ca 3 phuong phap tim phuong an ban dau (PP1/PP2/PP3) tren cung
+        mot bai toan, moi phuong phap giai MODI den toi uu, roi tra ve bang
+        so sanh: ten phuong phap, Z ban dau, so o co ban, Z toi uu, so vong
+        lap MODI (dung cho Vi du 3 muc 5.2.3: "so sanh hai phuong phap do").
+        """
+        methods = [
+            ("least_cost", "Cuc tieu cuoc phi (Least Cost)"),
+            ("double_priority", "Uu tien kep theo gia cuoc cuc tieu"),
+            ("northwest_corner", "Goc tren-trai (Northwest Corner)"),
+        ]
+        rows: list[dict[str, Any]] = []
+        for key, name in methods:
+            self.reset()
+            init = self.find_initial_solution(key)
+            iterations = 0
+            while True:
+                step = self.optimize_step()
+                if step.get('is_optimal') or step.get('error'):
+                    break
+                iterations += 1
+            rows.append({
+                'method': name,
+                'initial_cost': init['cost'],
+                'basic_count': init['basic_count'],
+                'optimal_cost': self.total_cost(),
+                'modi_iterations': iterations,
+            })
+        return {'methods': rows}
+
+    def check_forbidden_cells(self) -> dict[str, Any]:
+        """
+        Kiem tra phuong an hien tai co van chuyen vao o cam nao khong.
+        Tra ve {'valid': bool, 'violations': [(i, j, x_ij), ...], 'message': str}.
+        Neu ton tai o cam co x_ij > 1e-9 thi valid=False (Menh de 4, muc 5.4).
+        """
+        violations: list[tuple[int, int, float]] = []
+        if self._x is None:
+            return {
+                'valid': True,
+                'violations': [],
+                'message': "Chua co phuong an.",
+            }
+        for (i, j) in sorted(self._forbidden):
+            if self._x[i, j] > 1e-9:
+                violations.append((i, j, float(self._x[i, j])))
+        if violations:
+            return {
+                'valid': False,
+                'violations': violations,
+                'message': (
+                    "Bai toan o cam khong co phuong an toi uu "
+                    "(Menh de 4, muc 5.4)"
+                ),
+            }
+        return {
+            'valid': True,
+            'violations': [],
+            'message': "Khong co o cam nao bi van chuyen.",
+        }
+
